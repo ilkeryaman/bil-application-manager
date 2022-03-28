@@ -125,10 +125,22 @@ public class UIGenerator implements IUIGenerator {
     }
 
     public void showMessage(String message, MessageType messageType){
-        JOptionPane optionPane =  messageType == MessageType.INFO
-                ? new JOptionPane(message, JOptionPane.INFORMATION_MESSAGE)
-                : new JOptionPane(message,JOptionPane.ERROR_MESSAGE);
-        JDialog dialog = optionPane.createDialog(messageType == MessageType.INFO ? Messages.Info: Messages.Error);
+        JOptionPane optionPane;
+        String title;
+        if(messageType.equals(MessageType.INFO)){
+            optionPane = new JOptionPane(message, JOptionPane.INFORMATION_MESSAGE);
+            title = Messages.Info;
+        } else if (messageType.equals(MessageType.WARNING)){
+            optionPane = new JOptionPane(message, JOptionPane.WARNING_MESSAGE);
+            title = Messages.Warning;
+        } else if (messageType.equals(MessageType.ERROR)){
+            optionPane = new JOptionPane(message, JOptionPane.ERROR_MESSAGE);
+            title = Messages.Error;
+        } else {
+            optionPane = new JOptionPane(message, JOptionPane.INFORMATION_MESSAGE);
+            title = Messages.Info;
+        }
+        JDialog dialog = optionPane.createDialog(title);
         dialog.setLocationRelativeTo(frame);
         dialog.setAlwaysOnTop(true);
         dialog.setVisible(true);

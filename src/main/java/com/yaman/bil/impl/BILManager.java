@@ -1,18 +1,24 @@
 package com.yaman.bil.impl;
 
 import com.yaman.bil.IBILManager;
+import com.yaman.bil.ILogExtractor;
 import com.yaman.bil.enums.BILCommand;
 import com.yaman.bil.enums.BILCommandResponse;
 import com.yaman.bil.helper.BILExecutionResult;
 import com.yaman.bil.helper.ByteOperations;
+import com.yaman.bil.constants.Messages;
 import com.yaman.property.IPropertyManager;
 import com.yaman.property.enums.ConnectionProperty;
 import com.yaman.ssh.ISessionManager;
 import com.yaman.ssh.enums.ExitStatus;
 import com.yaman.ssh.helper.CommandResult;
+import com.yaman.util.DateUtils;
+import com.yaman.util.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.sql.Timestamp;
 import java.util.List;
 import java.util.Properties;
 
@@ -24,6 +30,15 @@ public class BILManager implements IBILManager {
 
     @Autowired
     IPropertyManager propertyManager;
+
+    @Autowired
+    ILogExtractor logExtractor;
+
+    @Value("${bil.startlog.check.count}")
+    private int startLogCheckCount;
+
+    @Value("${bil.startlog.check.delay}")
+    private int startLogCheckDelay;
 
     @Override
     public void connect() {
@@ -57,6 +72,42 @@ public class BILManager implements IBILManager {
 
         } finally {
             return new BILExecutionResult(isSucceeded, isAlreadyRunning);
+        }
+    }
+
+    @Override
+    public BILExecutionResult checkStartedLog() {
+        boolean isSucceeded = false;
+        String message = null;
+        try {
+            BILExecutionResult checkResult = check();
+            if(checkResult.isCommandSucceeded()) {
+                if((boolean) checkResult.getData()){
+                    BILExecutionResult getLastLogTimeResult = getLastLogTime();
+                    if(getLastLogTimeResult.isCommandSucceeded()){
+                        Timestamp lastLogTime = DateUtils.convertToTimestamp(getLastLogTimeResult.getData().toString());
+                        if(lastLogTime != null){
+                            BILExecutionResult getStartedLogResult = getStartedLog(0, lastLogTime);
+                            if(getStartedLogResult.isCommandSucceeded()){
+                                isSucceeded = true;
+                                message = getStartedLogResult.getData().toString();
+                            } else {
+                                message = Messages.CheckLogError;
+                            }
+                        }
+                    } else {
+                        message = Messages.CheckLogError;
+                    }
+                } else {
+                    message = Messages.NotRunning;
+                }
+            } else {
+                message = Messages.CheckLogError;
+            }
+        } catch (Exception exc) {
+            message = Messages.CheckLogError;
+        } finally {
+            return new BILExecutionResult(isSucceeded, message);
         }
     }
 
@@ -118,6 +169,49 @@ public class BILManager implements IBILManager {
 
         } finally {
             return new BILExecutionResult(isSucceeded, isRunning);
+        }
+    }
+
+    private BILExecutionResult getLastLogTime() {
+        boolean isSucceeded = false;
+        String dateStr = null;
+        try {
+            CommandResult commandResult = sessionManager.runCommand(BILCommand.GET_LAST_LOG_TIME.getCommand());
+            String responseText = new String(commandResult.getByteArrayOutputStream().toByteArray());
+            dateStr = responseText;
+            isSucceeded = commandResult.getExitStatus() == ExitStatus.SUCCESS.getValue() && StringUtils.isNotEmpty(dateStr);
+        } catch (Exception exc){
+
+        } finally {
+            return new BILExecutionResult(isSucceeded, dateStr);
+        }
+    }
+
+    private BILExecutionResult getStartedLog(int currentCheckNumber, Timestamp lastLogTime) {
+        boolean isSucceeded = false;
+        String responseText = null;
+        try {
+            CommandResult commandResult = sessionManager.runCommand(BILCommand.GET_STARTED_LOG.getCommand());
+            responseText = new String(commandResult.getByteArrayOutputStream().toByteArray());
+            if(commandResult.getExitStatus() == ExitStatus.SUCCESS.getValue()){
+                Timestamp startedLogDate = logExtractor.extractDate(responseText);
+                if(startedLogDate != null && lastLogTime.compareTo(startedLogDate) < 0){
+                    isSucceeded = true;
+                } else {
+                    if(currentCheckNumber < startLogCheckCount){
+                        Thread.sleep(startLogCheckDelay);
+                        BILExecutionResult startedLogResult = getStartedLog(currentCheckNumber+1, lastLogTime);
+                        isSucceeded = startedLogResult.isCommandSucceeded();
+                        if(StringUtils.isNotEmpty(startedLogResult.getData())) {
+                            responseText = startedLogResult.getData().toString();
+                        }
+                    }
+                }
+            }
+        } catch (Exception exc){
+
+        } finally {
+            return new BILExecutionResult(isSucceeded, responseText);
         }
     }
 }

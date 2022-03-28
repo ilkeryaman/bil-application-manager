@@ -4,6 +4,7 @@ public class Messages {
     public static String Running = "RUNNING";
     public static String Stopped = "STOPPED";
     public static String Info = "INFO";
+    public static String Warning = "WARNING";
     public static String Error = "ERROR";
     public static String Loading = "Loading, please wait ...";
     public static String OperatingLabel = "Please wait while operating ...";

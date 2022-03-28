@@ -44,11 +44,14 @@ public class UIUpdaterService implements IUIUpdaterService {
         uiGenerator.viewModeOperating();
         new Thread(() -> {
             BILExecutionResult startResult = bilManager.start();
-            isLocked = false;
             if(startResult.isCommandSucceeded()){
+                BILExecutionResult checkStartedLogResult = bilManager.checkStartedLog();
+                isLocked = false;
                 uiGenerator.viewModeStarted();
-                uiGenerator.showMessage(Messages.StartSucceeded, MessageType.INFO);
+                uiGenerator.showMessage(Messages.StartSucceeded + "\n" + checkStartedLogResult.getData().toString(),
+                        checkStartedLogResult.isCommandSucceeded() ? MessageType.INFO : MessageType.WARNING);
             } else {
+                isLocked = false;
                 uiGenerator.viewModeStopped();
                 uiGenerator.showMessage(Messages.StartError, MessageType.ERROR);
             }
